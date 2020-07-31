@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html>
+	<head>
+		<meta name="viewport" content="width=device-width, user-scalable=no">
+		<link rel="stylesheet" href="2048-player-styles.css">
+		<title>2048</title>
+	</head>
+	<body>
+		<h1>2048 Player</h1>
+		<canvas id="board" width="500" height="500"></canvas>
+		<canvas id="gameScreen" width="200" height="100"></canvas>
+		
+		<div class="gui">
+			<form onsubmit="updateConfig(); return false;">
+				<p>Settings</p>
+				<p>
+					<input type="range" min="1" max="10" value="1" class="slider" id="depth" name="depth" onchange="depthDisplay.value = this.value;">
+					<label for="depth">Search depth:</label>
+					<output id="depthDisplay">1</output>
+					<br>
+					<input type="range" min="1" max="5" value="1" class="slider" id="pathIter" name="pathIter" onchange="pathIterDisplay.value = this.value;">
+					<label for="pathIter">Path evaluation iterations:</label>
+					<output id="pathIterDisplay">1</output>
+					<br>
+					<input type="range" min="0" max="1" value="1" step="0.01" class="slider" id="maximizeScore" name="maximizeScore" onchange="maximizeScoreDisplay.value = this.value;">
+					<label for="maximizeScore">Maximize score weight:</label>
+					<output id="maximizeScoreDisplay">1</output>
+					<br>
+					<input type="range" min="0" max="1" value="1" step="0.01" class="slider" id="maximizeEmptyTile" name="maximizeEmptyTile" onchange="maximizeEmptyTileDisplay.value = this.value;">
+					<label for="maximizeEmptyTile">Maximize empty tile weight:</label>
+					<output id="maximizeEmptyTileDisplay">1</output>
+					<br>
+					<input type="range" min="0" max="1" value="1" step="0.01" class="slider" id="maximizeMonotonicity" name="maximizeMonotonicity" onchange="maximizeMonotonicityDisplay.value = this.value;">
+					<label for="maximizeMonotonicity">Maximize monotonicity weight:</label>
+					<output id="maximizeMonotonicityDisplay">1</output>
+					<br>
+					<input type="range" min="0" max="1" value="0.1" step="0.01" class="slider" id="maximizeSmoothness" name="maximizeSmoothness" onchange="maximizeSmoothnessDisplay.value = this.value;">
+					<label for="maximizeSmoothness">Maximize smoothness weight:</label>
+					<output id="maximizeSmoothnessDisplay">0.1</output>
+					<br>
+					<input type="range" min="0.01" max="0.99" value="0.5" step="0.01" class="slider" id="monotonicityRValue" name="monotonicityRValue" onchange="monotonicityRValueDisplay.value = this.value;">
+					<label for="monotonicityRValue">Monotonicity evaluation R-value:</label>
+					<output id="monotonicityRValueDisplay">0.5</output>
+					<br>
+					<input type="range" min="0" max="1000" value="500" class="slider" id="msPerMove" name="msPerMove" onchange="msPerMoveDisplay.value = this.value;">
+					<label for="msPerMove">Milliseconds per move:</label>
+					<output id="msPerMoveDisplay">500</output>
+					<br>
+				</p>
+				<button type="submit" value="applySettings">Apply Setting</button>
+				<button type="reset" value="applySettings">Default</button>
+			</form>
+			<p>
+					<button type="button" value="resetBoard" onclick="createNewBoard()">Reset board</button>
+					<input type="checkbox" id="autoPlay" name="autoPlay" value="AutoPlay">
+					<label for="autoPlay">Turn on auto play</label>
+			</p>
+		</div>
+		
+		<script src="2048.js"></script>
+		<script>
+			const canvas1 = document.getElementById("board");
+			const ctx1 = canvas1.getContext("2d");
+			const canvas2 = document.getElementById("gameScreen");
+			const ctx2 = canvas2.getContext("2d");
+			const TILE_COLORS = ["#cdc1b4", "#eee4da", "#ede0c8", "#f2b179", "#f59563", "#f67c5f", "#f65e3b", "#edcf72", "#edcc61", "#edc850", "#edc53f", "#edc22e"];
+			const TILE = [0,2,4,8,16,32,64,128,256,512,1024,2048];
+			const BOARD_WIDTH = 4;
+			const BOARD_HEIGHT = 4;
+			
+			this.evaluationSetting;
+			this.depth;
+			this.numIters;
+			this.msPerMove;
+			this.gameBoard;
+			
+			function draw()
+			{
+				ctx2.fillRect(0, 0, canvas2.width, canvas2.height);
+				ctx1.fillRect(0, 0, canvas1.width, canvas1.height);
+				
+				for(let i = 0; i < canvas1.width; i += (canvas1.width/BOARD_WIDTH))
+				{
+					for(let j = 0; j < canvas1.height; j += (canvas1.height/BOARD_HEIGHT))
+					{
+						let tileCoord = new Coordinate(i / (canvas1.width/BOARD_WIDTH), j / (canvas1.height/BOARD_HEIGHT));
+						drawTile(canvas1, ctx1, gameBoard.grabTile(tileCoord), i, j);
+					}
+				}
+				
+				ctx2.fillStyle = "#000000";
+				ctx2.fillText("Score: " + gameBoard.score, 0, 20);
+				ctx2.fillText("Moves: " + gameBoard.moves, 0, 60);
+				ctx2.fillStyle = "#ffffff";
+			}
+			
+			function drawTile(canvas, ctx, tileNum, x, y)
+			{
+				ctx.save();
+				ctx.fillStyle = TILE_COLORS[TILE_COLORS.length - 1]
+				tileColorIndex = TILE.indexOf(tileNum);
+				
+				if(tileColorIndex >= 0)
+				{
+					ctx.fillStyle = TILE_COLORS[tileColorIndex];
+				}
+				
+				ctx.strokeStyle = "#BBADA0";
+				ctx.lineWidth = 10;
+				
+				ctx.fillRect(x, y, (canvas.width/BOARD_WIDTH), (canvas.height/BOARD_HEIGHT));
+				ctx.strokeRect(x, y, (canvas.width/BOARD_WIDTH), (canvas.height/BOARD_HEIGHT));
+				
+				
+				if(tileNum > 0)
+				{
+					ctx.fillStyle = "#000000";
+					ctx.fillText(tileNum ,x + canvas.width/(BOARD_WIDTH * 2), y + canvas.width/(BOARD_HEIGHT * 2));
+				}
+				ctx.restore();
+			}
+			
+			function updateConfig()
+			{
+				this.evaluationSetting = new EvaluationSetting(document.getElementById("maximizeScore").value,
+						document.getElementById("maximizeEmptyTile").value, 
+						document.getElementById("maximizeMonotonicity").value,
+						document.getElementById("maximizeSmoothness").value,
+						document.getElementById("monotonicityRValue").value);
+				this.depth = document.getElementById("depth").value;
+				this.numIters = document.getElementById("pathIter").value;
+				this.msPerMove = document.getElementById("msPerMove").value;
+				console.log(this.msPerMove);
+			}
+			
+			function createNewBoard()
+			{
+				this.gameBoard = new GameBoard(BOARD_WIDTH, BOARD_HEIGHT);
+				draw();
+			}
+			
+			function updateBoard()
+			{
+				makeBestMove(this.gameBoard, this.depth, this.numIters, this.evaluationSetting);
+				draw();
+			}
+			
+			function loop()
+			{
+				if(document.getElementById("autoPlay").checked)
+				{
+					if(!this.gameBoard.isGameOver())
+					{
+						updateBoard();
+					}
+					draw();
+				}
+				setTimeout(loop, this.msPerMove);
+			}
+			
+			
+			ctx1.font = "40pt Sans-serif";
+			ctx2.font = "20pt Sans-serif";
+			ctx1.textAlign = "center";
+			ctx1.textBaseline = "middle";
+			ctx1.fillStyle = "#cdc1b4";
+			ctx2.fillStyle = "#ffffff";
+			
+			// Initial config
+			createNewBoard();
+			updateConfig();
+			
+			// Initial draw
+			draw();
+			
+			// Initiate loop
+			loop();
+		</script>
+		<div>
+			<p>
+				<a href="https://github.com/lance60/2048_Player" target="_blank">GitHub</a>
+				<br>
+				<a href="https://lance60.github.io/">Back to index</a>
+			</p>
+		</div>
+	</body>
+</html>
