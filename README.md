@@ -11,6 +11,8 @@ arranged in descending order starting from the corner of the board.
 The javascript file consists of an implementation of the game and the decision making process.
 There is also webpage demonstration included in the repository.
 
+Note: webpage might become unresponsive if path evaluation iteration is too high. Be careful.
+
 To do:
 - Optimization (alpha-beta pruning).
 - Reduce repeated code.
