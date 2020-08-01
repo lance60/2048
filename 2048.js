@@ -4,6 +4,7 @@ const TILE_SPAWN_TABLE = [2, 4];
 const TILE_SPAWN_RATE = [90, 10];
 const WINNING_TILE = 2048;
 
+// Custom datatypes
 class Coordinate
 {
 	constructor(x, y)
@@ -18,6 +19,41 @@ class Coordinate
 	}
 }
 
+const Direction = {
+		NONE: {index: -1, string: "None"},
+		UP: {index: 0, string: "Up"},
+		DOWN: {index: 1, string: "Down"},
+		LEFT: {index: 2, string: "Left"},
+		RIGHT: {index: 3, string: "Right"},
+		LIST: [this.UP, this.DOWN, this.LEFT, this.RIGHT]
+	};
+Object.freeze(Direction);
+
+const DIRECTION_LIST = [Direction.UP, Direction.DOWN, Direction.LEFT, Direction.RIGHT];
+
+class MoveData
+{
+	constructor(direction)
+	{
+		this.score = Number.MIN_VALUE;
+		this.isValidMove = false;
+		this.direction = direction;
+	}
+}
+
+class EvaluationSetting
+{
+	constructor(scoreWeight, emptyTileWeight, monotonicityWeight, roughnessPenaltyWeight, monotonicityRVal)
+	{
+		this.scoreWeight = scoreWeight;
+		this.emptyTileWeight = emptyTileWeight;
+		this.monotonicityWeight = monotonicityWeight;
+		this.roughnessPenaltyWeight = roughnessPenaltyWeight;
+		this.monotonicityRVal = monotonicityRVal;
+	}
+}
+
+// Game implementation
 class GameBoard
 {
 	constructor(width, height)
@@ -28,6 +64,7 @@ class GameBoard
 		this.moves = 0;
 		this.cumulativeProbability = 0;
 		this.hasWon = false;
+		this.lastSpawnedTileCoord;
 		this.emptyTileTable;
 		this.boardState;
 		
@@ -40,6 +77,8 @@ class GameBoard
 		this.generateEmptyTileTable();
 		this.spawnTile();
 		this.spawnTile();
+		
+		this.lastSpawnedTileCoord = undefined;
 	}
 	
 	copyState(gameBoard)
@@ -141,6 +180,7 @@ class GameBoard
 		
 		this.boardState[tileCoord.x][tileCoord.y] = tileValue
 		this.generateEmptyTileTable();
+		this.lastSpawnedTileCoord = tileCoord;
 	}
 	
 	shiftMovableTile(tileSet)
@@ -184,27 +224,74 @@ class GameBoard
 		return score;
 	}
 	
-	// Due to the need to traverse arrays differently, most functions
-	// below are almost identical to each other
-	
-	moveUp()
+	// Not sure if combining all move function into one is good. Looks overloaded.
+	move(direction)
 	{
-		if(this.isUpMovementPossible())
+		if(this.isMovementPossible(direction))
 		{
-			for(let i = 0; i < this.width; i++)
+			let outerTraversalLimit = 0;
+			let tileSetLength = 0;
+			
+			switch(direction.index)
 			{
-				let tileSet = new Array(this.height);
+				case Direction.UP.index:
+				case Direction.DOWN.index:
+					outerTraversalLimit = this.width;
+					tileSetLength = this.height;
+					break;
+				case Direction.LEFT.index:
+				case Direction.RIGHT.index:
+					outerTraversalLimit = this.height;
+					tileSetLength = this.width;
+					break;
+			}
+			
+			for(let i = 0; i < outerTraversalLimit; i++)
+			{
+				let tileSet = [];
 				
-				for(let j = 0; j < this.height; j++)
+				for(let j = 0; j < tileSetLength; j++)
 				{
-					tileSet[j] = this.grabTile(new Coordinate(i, j));
+					let curTileCoord;
+					
+					switch(direction.index)
+					{
+						case Direction.UP.index:
+							curTileCoord = new Coordinate(i, j);
+							break;
+						case Direction.DOWN.index:
+							curTileCoord = new Coordinate(i, tileSetLength - 1 - j)
+							break;
+						case Direction.LEFT.index:
+							curTileCoord = new Coordinate(j, i);
+							break;
+						case Direction.RIGHT.index:
+							curTileCoord = new Coordinate(tileSetLength - 1 - j, i);
+							break;
+					}
+					
+					tileSet.push(this.grabTile(curTileCoord));
 				}
 				
 				this.score += this.shiftMovableTile(tileSet);
 				
-				for(let j = 0; j < this.height; j++)
+				for(let j = 0; j < tileSetLength; j++)
 				{
-					this.boardState[i][j] = tileSet[j];
+					switch(direction.index)
+					{
+						case Direction.UP.index:
+							this.boardState[i][j] = tileSet[j];
+							break;
+						case Direction.DOWN.index:
+							this.boardState[i][tileSetLength - 1 - j] = tileSet[j];
+							break;
+						case Direction.LEFT.index:
+							this.boardState[j][i] = tileSet[j];
+							break;
+						case Direction.RIGHT.index:
+							this.boardState[tileSetLength - 1 - j][i] = tileSet[j];
+							break;
+					}
 				}
 			}
 			
@@ -216,219 +303,52 @@ class GameBoard
 			this.generateEmptyTileTable();
 			this.spawnTile();
 			this.moves++;
+			
 			return true;
 		}
 		
 		return false;
 	}
 	
-	moveDown()
+	canMove(tileCoord, direction)
 	{
-		if(this.isDownMovementPossible())
+		let curTileVal = this.grabTile(tileCoord);
+		let adjacentTileCoord;
+		
+		switch(direction.index)
 		{
-			for(let i = 0; i < this.width; i++)
-			{
-				let tileSet = new Array(this.height);
-				
-				for(let j = this.height - 1; j >= 0; j--)
-				{
-					tileSet[this.height - 1 - j] = this.grabTile(new Coordinate(i, j));
-				}
-				
-				this.score += this.shiftMovableTile(tileSet);
-				
-				for(let j = this.height - 1; j >= 0; j--)
-				{
-					this.boardState[i][j] = tileSet[this.height - 1 - j];
-				}
-			}
-			
-			if(!this.hasWon)
-			{
-				this.hasWon = this.hasTile(WINNING_TILE);
-			}
-			
-			this.generateEmptyTileTable();
-			this.spawnTile();
-			this.moves++;
-			return true;
+			case Direction.UP.index:
+				adjacentTileCoord = new Coordinate(tileCoord.x, tileCoord.y - 1);
+				break;
+			case Direction.DOWN.index:
+				adjacentTileCoord = new Coordinate(tileCoord.x, tileCoord.y + 1);
+				break;
+			case Direction.LEFT.index:
+				adjacentTileCoord = new Coordinate(tileCoord.x - 1, tileCoord.y);
+				break;
+			case Direction.RIGHT.index:
+				adjacentTileCoord = new Coordinate(tileCoord.x + 1, tileCoord.y);
+				break;
+			default:
+				return false;
 		}
 		
-		return false;
-	}
-	
-	moveLeft()
-	{
-		if(this.isLeftMovementPossible())
+		if(!this.isInBounds(adjacentTileCoord))
 		{
-			for(let j = 0; j < this.height; j++)
-			{
-				let tileSet = new Array(this.width);
-				
-				for(let i = 0; i < this.width; i++)
-				{
-					tileSet[i] = this.grabTile(new Coordinate(i, j));
-				}
-				
-				this.score += this.shiftMovableTile(tileSet);
-				
-				for(let i = 0; i < this.width; i++)
-				{
-					this.boardState[i][j] = tileSet[i];
-				}
-			}
-			
-			if(!this.hasWon)
-			{
-				this.hasWon = this.hasTile(WINNING_TILE);
-			}
-			
-			this.generateEmptyTileTable();
-			this.spawnTile();
-			this.moves++;
-			return true;
+			return false;
 		}
 		
-		return false;
+		return this.grabTile(adjacentTileCoord) == 0 || this.grabTile(adjacentTileCoord) == curTileVal;
 	}
 	
-	moveRight()
-	{
-		if(this.isRightMovementPossible())
-		{
-			for(let j = 0; j < this.height; j++)
-			{
-				let tileSet = new Array(this.width);
-				
-				for(let i = this.width - 1; i >= 0; i--)
-				{
-					tileSet[this.width - 1 - i] = this.grabTile(new Coordinate(i, j));
-				}
-				
-				this.score += this.shiftMovableTile(tileSet);
-				
-				for(let i = this.width - 1; i >= 0; i--)
-				{
-					this.boardState[i][j] = tileSet[this.width - 1 - i];
-				}
-			}
-			
-			if(!this.hasWon)
-			{
-				this.hasWon = this.hasTile(WINNING_TILE);
-			}
-			
-			this.generateEmptyTileTable();
-			this.spawnTile();
-			this.moves++;
-			return true;
-		}
-		
-		return false;
-	}
-	
-	
-	// This function is not meant to be used on up edge tiles
-	// (Tile coordinates that has y = 0)
-	canMoveUp(tileCoord)
-	{
-		let curTileVal = this.grabTile(tileCoord);
-		let upTileVal = this.grabTile(new Coordinate(tileCoord.x, tileCoord.y - 1));
-		
-		return upTileVal == 0 || upTileVal == curTileVal;
-	}
-	
-	
-	// This function is not meant to be used on down edge tiles
-	// (Tile coordinates that has y = this.height - 1)
-	canMoveDown(tileCoord)
-	{
-		let curTileVal = this.grabTile(tileCoord);
-		let downTileVal = this.grabTile(new Coordinate(tileCoord.x, tileCoord.y + 1));
-		
-		return downTileVal == 0 || downTileVal == curTileVal;
-	}
-	
-	
-	// This function is not meant to be used on left edge tiles
-	// (Tile coordinates that has x = 0)
-	canMoveLeft(tileCoord)
-	{
-		let curTileVal = this.grabTile(tileCoord);
-		let leftTileVal = this.grabTile(new Coordinate(tileCoord.x - 1, tileCoord.y));
-		
-		return leftTileVal == 0 || leftTileVal == curTileVal;
-	}
-	
-	// This function is not meant to be used on positive x edge tiles
-	// (Tile coordinates that has x = this.width - 1)
-	canMoveRight(tileCoord)
-	{
-		let curTileVal = this.grabTile(tileCoord);
-		let rightTileVal = this.grabTile(new Coordinate(tileCoord.x + 1, tileCoord.y));
-		
-		return rightTileVal == 0 || rightTileVal == curTileVal;
-	}
-	
-	isUpMovementPossible()
+	isMovementPossible(direction)
 	{
 		for(let i = 0; i < this.width; i++)
 		{
-			for(let j = 1; j < this.height; j++)
-			{
-				let curCoord = new Coordinate(i, j);
-				if(this.grabTile(curCoord) != 0 && this.canMoveUp(curCoord))
-				{
-					return true;
-				}
-			}
-		}
-		
-		return false;
-	}
-	
-	isDownMovementPossible()
-	{
-		for(let i = 0; i < this.width; i++)
-		{
-			for(let j = 0; j < this.height - 1; j++)
-			{
-				let curCoord = new Coordinate(i, j);
-				if(this.grabTile(curCoord) != 0 && this.canMoveDown(curCoord))
-				{
-					return true;
-				}
-			}
-		}
-		
-		return false;
-	}
-	
-	isLeftMovementPossible()
-	{
-		for(let i = 1; i < this.width; i++)
-		{
 			for(let j = 0; j < this.height; j++)
 			{
 				let curCoord = new Coordinate(i, j);
-				if(this.grabTile(curCoord) != 0 && this.canMoveLeft(curCoord))
-				{
-					return true;
-				}
-			}
-		}
-		
-		return false;
-	}
-	
-	isRightMovementPossible()
-	{
-		for(let i = 0; i < this.width - 1; i++)
-		{
-			for(let j = 0; j < this.height; j++)
-			{
-				let curCoord = new Coordinate(i, j);
-				if(this.grabTile(curCoord) != 0 && this.canMoveRight(curCoord))
+				if(this.grabTile(curCoord) != 0 && this.canMove(curCoord, direction))
 				{
 					return true;
 				}
@@ -440,7 +360,10 @@ class GameBoard
 	
 	isGameOver()
 	{
-		return !this.isUpMovementPossible() && !this.isDownMovementPossible() && !this.isLeftMovementPossible() && !this.isRightMovementPossible();
+		return !this.isMovementPossible(Direction.UP) &&
+		!this.isMovementPossible(Direction.DOWN) &&
+		!this.isMovementPossible(Direction.LEFT) &&
+		!this.isMovementPossible(Direction.RIGHT);
 	}
 	
 	hasTile(tile)
@@ -460,72 +383,15 @@ class GameBoard
 	}
 }
 
-const Direction = {
-	NONE: -1,
-	UP: 0,
-	DOWN: 1,
-	LEFT: 2,
-	RIGHT: 3,
-	TOTAL: 4
-};
-Object.freeze(Direction);
-
-class MoveData
-{
-	constructor(direction)
-	{
-		this.score = Number.MIN_VALUE;
-		this.isValidMove = false;
-		this.direction = direction;
-	}
-}
-
-class EvaluationSetting
-{
-	constructor(scoreWeight, emptyTileWeight, monotonicityWeight, roughnessPenaltyWeight, monotonicityRVal)
-	{
-		this.scoreWeight = scoreWeight;
-		this.emptyTileWeight = emptyTileWeight;
-		this.monotonicityWeight = monotonicityWeight;
-		this.roughnessPenaltyWeight = roughnessPenaltyWeight;
-		this.monotonicityRVal = monotonicityRVal;
-	}
-}
-
+// Board evaluation implementations
 class BoardPossibility
 {
 	constructor(gameBoard, direction, evaluationSettings)
 	{
 		this.gameBoard = new GameBoard(gameBoard.width, gameBoard.height);
 		this.gameBoard.copyState(gameBoard);
-		this.movementDirection = Direction.NONE;
-		this.movementDirectionPrint = "None";
-		this.isValidMove = false;
-		
-		if(direction == Direction.UP)
-		{
-			this.isValidMove = this.gameBoard.moveUp();
-			this.movementDirectionPrint = "Up";
-			this.movementDirection = direction;
-		}
-		else if(direction == Direction.DOWN)
-		{
-			this.isValidMove = this.gameBoard.moveDown();
-			this.movementDirectionPrint = "Down";
-			this.movementDirection = direction;
-		}
-		else if(direction == Direction.LEFT)
-		{
-			this.isValidMove = this.gameBoard.moveLeft();
-			this.movementDirectionPrint = "Left";
-			this.movementDirection = direction;
-		}
-		else if(direction == Direction.RIGHT)
-		{
-			this.isValidMove = this.gameBoard.moveRight();
-			this.movementDirectionPrint = "Right";
-			this.movementDirection = direction;
-		}
+		this.movementDirection = direction;
+		this.isValidMove = this.gameBoard.move(direction);
 		
 		this.scoreDifference = this.gameBoard.score - gameBoard.score;
 		this.numEmptyTiles = this.gameBoard.emptyTileTable.length;
@@ -691,16 +557,18 @@ class BoardPossibility
 	
 }
 
+// Functions for decision making process
 function generateFutureStates(curBoard, evaluationSettings)
 {
 	let boardPossibilities = [];
 	
-	for(let i = 0; i < Direction.TOTAL; i++)
+	for(let i = 0; i < DIRECTION_LIST.length; i++)
 	{
-		boardPossibilities.push(new BoardPossibility(curBoard, i, evaluationSettings));
+		boardPossibilities.push(new BoardPossibility(curBoard, DIRECTION_LIST[i], evaluationSettings));
 	}
 	
 	return boardPossibilities;
+	
 }
 
 function evaluatePossibilityPotential(boardPossibility, depth, evaluationSettings)
@@ -713,10 +581,10 @@ function evaluatePossibilityPotential(boardPossibility, depth, evaluationSetting
 	let futurePossibilities = generateFutureStates(boardPossibility.gameBoard, evaluationSettings);
 	
 	return boardPossibility.moveScore + 
-			Math.max(evaluatePossibilityPotential(futurePossibilities[Direction.UP], depth - 1, evaluationSettings),
-					evaluatePossibilityPotential(futurePossibilities[Direction.DOWN], depth - 1, evaluationSettings),
-					evaluatePossibilityPotential(futurePossibilities[Direction.LEFT], depth - 1, evaluationSettings),
-					evaluatePossibilityPotential(futurePossibilities[Direction.RIGHT], depth - 1, evaluationSettings));
+			Math.max(evaluatePossibilityPotential(futurePossibilities[Direction.UP.index], depth - 1, evaluationSettings),
+					evaluatePossibilityPotential(futurePossibilities[Direction.DOWN.index], depth - 1, evaluationSettings),
+					evaluatePossibilityPotential(futurePossibilities[Direction.LEFT.index], depth - 1, evaluationSettings),
+					evaluatePossibilityPotential(futurePossibilities[Direction.RIGHT.index], depth - 1, evaluationSettings));
 }
 
 // Evaluate move score based on different ways the tile could spawn after each move
@@ -751,33 +619,12 @@ function evaluateWeightedMoveScores(curBoard, numIter, depth, evaluationSettings
 	return moveDatas;
 }
 
-function moveToDirection(curBoard, direction)
-{
-	if(direction == Direction.UP)
-	{
-		curBoard.moveUp();
-	}
-	else if(direction == Direction.DOWN)
-	{
-		curBoard.moveDown();
-	}
-	else if(direction == Direction.LEFT)
-	{
-		curBoard.moveLeft();
-	}
-	else if(direction == Direction.RIGHT)
-	{
-		curBoard.moveRight();
-	}
-}
-
 function makeBestMove(curBoard, numIter, depth, evaluationSettings)
 {
 	let moveDatas = evaluateWeightedMoveScores(curBoard, numIter, depth, evaluationSettings);
 	let bestMove = new MoveData(Direction.NONE);
 	
 	// Select first valid move data
-	
 	let init = 0;
 	
 	while(init < moveDatas.length && !moveDatas[init].isValidMove)
@@ -795,5 +642,6 @@ function makeBestMove(curBoard, numIter, depth, evaluationSettings)
 		}
 	}
 	
-	moveToDirection(curBoard, bestMove.direction)
+	curBoard.move(bestMove.direction);
+	return bestMove.direction;
 }

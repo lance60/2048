@@ -8,7 +8,7 @@
 	<body>
 		<h1>2048 Player</h1>
 		<canvas id="board" width="500" height="500"></canvas>
-		<canvas id="gameScreen" width="200" height="100"></canvas>
+		<canvas id="gameScreen" width="250" height="125"></canvas>
 		
 		<div class="gui">
 			<form onsubmit="updateConfig(); return false;">
@@ -57,7 +57,7 @@
 			</p>
 		</div>
 		
-		<script src="https://cdn.jsdelivr.net/gh/lance60/2048_Player@1.0.0/2048.min.js"></script>
+		<script src="2048.js"></script>
 		<script>
 			const canvas1 = document.getElementById("board");
 			const ctx1 = canvas1.getContext("2d");
@@ -73,24 +73,41 @@
 			this.numIters;
 			this.msPerMove;
 			this.gameBoard;
+			this.lastMove = Direction.NONE;
 			
 			function draw()
 			{
 				ctx2.fillRect(0, 0, canvas2.width, canvas2.height);
 				ctx1.fillRect(0, 0, canvas1.width, canvas1.height);
+				let spawnedTileCoord = this.gameBoard.lastSpawnedTileCoord;
 				
 				for(let i = 0; i < canvas1.width; i += (canvas1.width/BOARD_WIDTH))
 				{
 					for(let j = 0; j < canvas1.height; j += (canvas1.height/BOARD_HEIGHT))
 					{
 						let tileCoord = new Coordinate(i / (canvas1.width/BOARD_WIDTH), j / (canvas1.height/BOARD_HEIGHT));
-						drawTile(canvas1, ctx1, gameBoard.grabTile(tileCoord), i, j);
+						if(spawnedTileCoord != undefined && tileCoord.x  == spawnedTileCoord.x && tileCoord.y == spawnedTileCoord.y)
+						{
+							drawTile(canvas1, ctx1, 0, i, j);
+						}
+						else
+						{
+							drawTile(canvas1, ctx1, this.gameBoard.grabTile(tileCoord), i, j);
+						}
+						
 					}
 				}
+				
+				if(spawnedTileCoord != undefined)
+				{
+					setTimeout(drawTile, this.msPerMove/2, canvas1, ctx1, this.gameBoard.grabTile(spawnedTileCoord), spawnedTileCoord.x * (canvas1.width/BOARD_WIDTH), spawnedTileCoord.y * (canvas1.height/BOARD_HEIGHT));
+				}
+				//drawTile(canvas1, ctx1, this.gameBoard.grabTile(spawnedTileCoord), spawnedTileCoord.x * (canvas1.width/BOARD_WIDTH), spawnedTileCoord.y * (canvas1.height/BOARD_HEIGHT));
 				
 				ctx2.fillStyle = "#000000";
 				ctx2.fillText("Score: " + gameBoard.score, 0, 20);
 				ctx2.fillText("Moves: " + gameBoard.moves, 0, 60);
+				ctx2.fillText("Last move: " + this.lastMove.string, 0, 100);
 				ctx2.fillStyle = "#ffffff";
 			}
 			
@@ -135,12 +152,13 @@
 			function createNewBoard()
 			{
 				this.gameBoard = new GameBoard(BOARD_WIDTH, BOARD_HEIGHT);
+				this.lastMove = Direction.NONE;
 				draw();
 			}
 			
 			function updateBoard()
 			{
-				makeBestMove(this.gameBoard, this.depth, this.numIters, this.evaluationSetting);
+				this.lastMove = makeBestMove(this.gameBoard, this.depth, this.numIters, this.evaluationSetting);
 				draw();
 			}
 			
@@ -152,7 +170,6 @@
 					{
 						updateBoard();
 					}
-					draw();
 				}
 				setTimeout(loop, this.msPerMove);
 			}
