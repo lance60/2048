@@ -1,6 +1,6 @@
 # 2048_Player
 
-This program plays a game called 2048 using expectimax algorithm with following heuristics:
+This program plays a game called 2048 using minimax + MCTS algorithm with following heuristics:
 - Score: How much the game score increased
 - Number of empty tiles: How many empty tiles are remaining
 - Monotonicity: How monotonic the board is. That is, how well are the tiles arranged in descending order starting from the corner of the board.
