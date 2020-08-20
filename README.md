@@ -7,7 +7,7 @@ This program plays a game called 2048 using minimax + MCTS algorithm with follow
 - Smoothness: How close a tile's value is to each of its neighboring tile's value.
 
 The javascript file consists of an implementation of the game and the decision making process.
-There is also webpage demonstration included in the repository.
+There is also webpage demonstration included in the repository. You can try it [here](https://lance60.github.io/2048_Player/)
 
 Note: webpage might become unresponsive if path evaluation iteration is too high. Be careful.
 
